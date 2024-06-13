@@ -21,12 +21,15 @@ import numpy.random as random
 import re
 import sys
 import weakref
+import cv2
 
 try:
     import pygame
     from pygame.locals import KMOD_CTRL
     from pygame.locals import K_ESCAPE
     from pygame.locals import K_q
+    from pygame.locals import K_0
+    from pygame.locals import K_9
 except ImportError:
     raise RuntimeError('cannot import pygame, make sure pygame package is installed')
 
@@ -148,11 +151,15 @@ class World(object):
         blueprint_list = get_actor_blueprints(self.world, self._actor_filter, self._actor_generation)
         if not blueprint_list:
             raise ValueError("Couldn't find any blueprints with the specified filters")
-        blueprint = random.choice(blueprint_list)
-        blueprint.set_attribute('role_name', 'hero')
-        if blueprint.has_attribute('color'):
-            color = random.choice(blueprint.get_attribute('color').recommended_values)
-            blueprint.set_attribute('color', color)
+        # blueprint = random.choice(blueprint_list)
+        # blueprint.set_attribute('role_name', 'hero')
+        # if blueprint.has_attribute('color'):
+        #     color = random.choice(blueprint.get_attribute('color').recommended_values)
+        #     blueprint.set_attribute('color', color)
+
+        #added below
+        blueprint = self.world.get_blueprint_library().find('vehicle.carlamotors.european_hgv')
+        blueprint.set_attribute('role_name','ego')
 
         # Spawn the player.
         if self.player is not None:
@@ -241,6 +248,7 @@ class World(object):
 class KeyboardControl(object):
     def __init__(self, world):
         world.hud.notification("Press 'H' or '?' for help.", seconds=4.0)
+        self.world = world
 
     def parse_events(self):
         for event in pygame.event.get():
@@ -249,6 +257,11 @@ class KeyboardControl(object):
             if event.type == pygame.KEYUP:
                 if self._is_quit_shortcut(event.key):
                     return True
+                elif event.key > K_0 and event.key <= K_9:
+                    index_ctrl = 0
+                    if pygame.key.get_mods() & KMOD_CTRL:
+                        index_ctrl = 9
+                    self.world.camera_manager.set_sensor(event.key - 1 - K_0 + index_ctrl)
 
     @staticmethod
     def _is_quit_shortcut(key):
@@ -599,6 +612,7 @@ class CameraManager(object):
         bound_z = 0.5 + self._parent.bounding_box.extent.z
         attachment = carla.AttachmentType
         self._camera_transforms = [
+            (carla.Transform(carla.Location(x=0.25*bound_x, y=+0.0*bound_y, z=2.5*bound_z), carla.Rotation(pitch=-25.0)), attachment.Rigid),
             (carla.Transform(carla.Location(x=-2.0*bound_x, y=+0.0*bound_y, z=2.0*bound_z), carla.Rotation(pitch=8.0)), attachment.SpringArmGhost),
             (carla.Transform(carla.Location(x=+0.8*bound_x, y=+0.0*bound_y, z=1.3*bound_z)), attachment.Rigid),
             (carla.Transform(carla.Location(x=+1.9*bound_x, y=+1.0*bound_y, z=1.2*bound_z)), attachment.SpringArmGhost),
@@ -608,6 +622,7 @@ class CameraManager(object):
         self.transform_index = 1
         self.sensors = [
             ['sensor.camera.rgb', cc.Raw, 'Camera RGB'],
+            ['sensor.camera.dvs', cc.Raw, 'Dynamic Vision Sensor', {}],
             ['sensor.camera.depth', cc.Raw, 'Camera Depth (Raw)'],
             ['sensor.camera.depth', cc.Depth, 'Camera Depth (Gray Scale)'],
             ['sensor.camera.depth', cc.LogarithmicDepth, 'Camera Depth (Logarithmic Gray Scale)'],
@@ -624,6 +639,11 @@ class CameraManager(object):
                 blp.set_attribute('image_size_y', str(hud.dim[1]))
             elif item[0].startswith('sensor.lidar'):
                 blp.set_attribute('range', '50')
+            elif item[0].startswith('sensor.camera.dvs'):
+                blp.set_attribute('positive_threshold', .2)
+                blp.set_attribute('negative_threshold', .2)
+                blp.set_attribute('sigma_positive_threshold', .15)
+                blp.set_attribute('sigma_negative_threshold', .15)
             item.append(blp)
         self.index = None
 
@@ -687,6 +707,26 @@ class CameraManager(object):
             lidar_img = np.zeros(lidar_img_size)
             lidar_img[tuple(lidar_data.T)] = (255, 255, 255)
             self.surface = pygame.surfarray.make_surface(lidar_img)
+        elif self.sensors[self.index][0].startswith('sensor.camera.dvs'):
+            # Example of converting the raw_data from a carla.DVSEventArray
+            # sensor into a NumPy array and using it as an image
+            dvs_events = np.frombuffer(image.raw_data, dtype=np.dtype([
+                ('x', np.uint16), ('y', np.uint16), ('t', np.int64), ('pol', np.bool)]))
+            dvs_img = np.zeros((image.height, image.width, 3), dtype=np.uint8)
+            # Blue is positive, red is negative
+            dvs_img[dvs_events[:]['y'], dvs_events[:]['x'], dvs_events[:]['pol'] * 2] = 255 #was 255
+
+            #Processing DVS Camera Stream by removing "lonely" pixels
+            # kernel = np.ones((3, 3), dtype=np.uint8) 
+            # eroded_image = cv2.erode(dvs_img.astype(np.uint8), kernel, iterations=3)
+            kernel = np.ones((2, 2), np.uint8)
+            eroded_image = cv2.erode(dvs_img, kernel, iterations = 1)
+            dilated_image = cv2.dilate(eroded_image, kernel, iterations = 1)
+
+            # Recover the original foreground pixels
+            dvs_img = dvs_img & dilated_image 
+
+            self.surface = pygame.surfarray.make_surface(dvs_img.swapaxes(0, 1))
         else:
             image.convert(self.sensors[self.index][1])
             array = np.frombuffer(image.raw_data, dtype=np.dtype("uint8"))
