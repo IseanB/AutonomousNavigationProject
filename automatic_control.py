@@ -21,6 +21,7 @@ import numpy.random as random
 import re
 import sys
 import weakref
+import cv2
 
 try:
     import pygame
@@ -713,7 +714,18 @@ class CameraManager(object):
                 ('x', np.uint16), ('y', np.uint16), ('t', np.int64), ('pol', np.bool)]))
             dvs_img = np.zeros((image.height, image.width, 3), dtype=np.uint8)
             # Blue is positive, red is negative
-            dvs_img[dvs_events[:]['y'], dvs_events[:]['x'], dvs_events[:]['pol'] * 2] = 255
+            dvs_img[dvs_events[:]['y'], dvs_events[:]['x'], dvs_events[:]['pol'] * 2] = 255 #was 255
+
+            #Processing DVS Camera Stream by removing "lonely" pixels
+            # kernel = np.ones((3, 3), dtype=np.uint8) 
+            # eroded_image = cv2.erode(dvs_img.astype(np.uint8), kernel, iterations=3)
+            kernel = np.ones((2, 2), np.uint8)
+            eroded_image = cv2.erode(dvs_img, kernel, iterations = 1)
+            dilated_image = cv2.dilate(eroded_image, kernel, iterations = 1)
+
+            # Recover the original foreground pixels
+            dvs_img = dvs_img & dilated_image 
+
             self.surface = pygame.surfarray.make_surface(dvs_img.swapaxes(0, 1))
         else:
             image.convert(self.sensors[self.index][1])
