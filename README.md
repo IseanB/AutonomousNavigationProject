@@ -1,4 +1,8 @@
 # Autonomous Trucking Project
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Trucks with trailers are a key constituent of the trucking and transportation services sector. They are one of the life-lines for economies across the world. However, in order to fully utilize the current work done on autonomous vehicles, we need to safely adapt these technologies to autonomous trucks. One such issue is a slower stopping time, compared to cars. This is a big built in weakness when reacting to unpredictable scenarios. (i.e. person walking in front of the truck from an occluded location.)
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Our project explores extending auto-pilot software in order to be more suited for autonomous trucks. We introduce a perfectly positioned DVS (Dynamic Vision Sensor) that covers the major blind spots of a truck and also allows for extremely fast real-time algorithms to react to the scenarios listed above. Below is a list of our contributions along with a link to our code.
+
 
 ## Members:
 Isean Bhanot, Samara Miramontes, Miguel Gutierrez
