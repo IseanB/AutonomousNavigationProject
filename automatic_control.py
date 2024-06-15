@@ -178,7 +178,7 @@ class World(object):
             spawn_points = self.map.get_spawn_points()
             spawn_point = random.choice(spawn_points) if spawn_points else carla.Transform()
             self.player = self.world.try_spawn_actor(blueprint, spawn_point)
-            self.modify_vehicle_physics(self.player)
+            self.modify_vehicle_physics(self.player, blueprint)
 
         if self._args.sync:
             self.world.tick()
@@ -203,12 +203,56 @@ class World(object):
         self.hud.notification('Weather: %s' % preset[1])
         self.player.get_world().set_weather(preset[0])
 
-    def modify_vehicle_physics(self, actor):
+    def modify_vehicle_physics(self, actor, blueprint):
         #If actor is not a vehicle, we cannot use the physics control
         try:
             physics_control = actor.get_physics_control()
             physics_control.use_sweep_wheel_collision = True
             actor.apply_physics_control(physics_control)
+            
+            # Create Wheels Physics Control
+            # front_left_wheel  = carla.WheelPhysicsControl(tire_friction=4.5, damping_rate=1.0, max_steer_angle=70.0, radius=30.0)
+            # front_right_wheel = carla.WheelPhysicsControl(tire_friction=2.5, damping_rate=1.5, max_steer_angle=70.0, radius=25.0)
+            # rear_left_wheel   = carla.WheelPhysicsControl(tire_friction=1.0, damping_rate=0.2, max_steer_angle=0.0,  radius=15.0)
+            # rear_right_wheel  = carla.WheelPhysicsControl(tire_friction=1.5, damping_rate=1.3, max_steer_angle=0.0,  radius=20.0)
+
+            # Samara's wheel tweaks
+            front_left_wheel  = carla.WheelPhysicsControl(tire_friction=4.5, damping_rate=1.0, max_steer_angle=60.0, radius=35.0)
+            front_right_wheel = carla.WheelPhysicsControl(tire_friction=4.5, damping_rate=1.0, max_steer_angle=60.0, radius=35.0)
+            rear_left_wheel   = carla.WheelPhysicsControl(tire_friction=1.0, damping_rate=1.5, max_steer_angle=0.0,  radius=20.0)
+            rear_right_wheel  = carla.WheelPhysicsControl(tire_friction=1.0, damping_rate=1.5, max_steer_angle=0.0,  radius=20.0)
+
+            wheels = [front_left_wheel, front_right_wheel, rear_left_wheel, rear_right_wheel]
+
+            # Change Vehicle Physics Control parameters of the vehicle
+            physics_control = blueprint.get_physics_control()
+
+            physics_control.torque_curve = [carla.Vector2D(x=0, y=400), carla.Vector2D(x=1300, y=600)]
+            physics_control.max_rpm = 10000
+            physics_control.moi = 1.0
+            physics_control.damping_rate_full_throttle = 0.0
+            physics_control.use_gear_autobox = True
+            physics_control.gear_switch_time = 0.5
+            physics_control.clutch_strength = 10
+            physics_control.mass = 10000
+            physics_control.drag_coefficient = 0.35 # increase drag coefficient to simulate more air resistance
+            physics_control.brake_torque = 20000  # Adjust brake torque to increase braking power
+            physics_control.brake_damping_rate = 1.5  # Increased brake damping rate
+            # physics_control.steering_curve = [carla.Vector2D(x=0, y=1), carla.Vector2D(x=100, y=1), carla.Vector2D(x=300, y=1)]
+            physics_control.steering_curve = [
+                carla.Vector2D(x=0, y=1),       # At 0 km/h, the steering angle multiplier is 1 (full steering sensitivity).
+                carla.Vector2D(x=50, y=0.8),    # At 50 km/h, the steering angle multiplier is 0.8 (full steering sensitivity).
+                carla.Vector2D(x=100, y=0.5),   # At 100 km/h, the steering angle multiplier is 0.5 (full steering sensitivity).
+                carla.Vector2D(x=200, y=0.3),   # At 200 km/h, the steering angle multiplier is 0.3 (full steering sensitivity).
+                carla.Vector2D(x=300, y=0.2)    # At 300 km/h, the steering angle multiplier is 0.2 (full steering sensitivity).
+            ]
+
+            physics_control.wheels = wheels
+            physics_control.use_sweep_wheel_collision = True
+
+            # Apply Vehicle Physics Control for the vehicle
+            blueprint.apply_physics_control(physics_control)
+
         except Exception:
             pass
 
